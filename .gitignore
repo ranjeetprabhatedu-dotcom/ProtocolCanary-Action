@@ -6,3 +6,4 @@ coverage/
 
 # dist/ is intentionally NOT ignored: it is the compiled, committed
 # distribution the Action runs from (see CONTRIBUTING.md).
+config.bat
