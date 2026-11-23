@@ -11,3 +11,4 @@ coverage/
 # tracked: it is reproducible from the committed bundle, and tracking a
 # multi-MB generated file caused recurring merge conflicts (#432).
 dist/index.js.map
+config.bat

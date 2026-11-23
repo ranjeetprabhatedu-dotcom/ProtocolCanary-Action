@@ -87,6 +87,18 @@ jobs:
       protocol: 28
 ```
 
+### Prebuilt binary integrity verification
+
+The Action executes prebuilt Protocol-Canary engine binaries downloaded as release assets while enforcing defensive verification boundaries:
+
+1. **Strict transport and destination boundary.** Release assets and published checksum manifests are fetched exclusively over authenticated HTTPS channels. As enforced in [`src/download-policy.ts`](../src/download-policy.ts), download requests validate source URLs using safe HTTPS parsing (`parseSafeHttpsUrl`) and exact GitHub API domain checks (`isExactGithubApiUrl`). Under decision D-11, HTTP redirect following is rejected outright, IP literals are forbidden, and bearer credentials (`Authorization: Bearer <token>`) are attached exclusively to requests targeting exact `api.github.com` endpoints and never forwarded to CDN or third-party targets.
+2. **Immutable cryptographic verification.** In [`src/canary.ts`](../src/canary.ts), every downloaded asset is verified before execution:
+   - For prebuilt release assets (`origin: "release-asset"`), `verifyInstalledBinary` looks up the release's published SHA-256 manifest (`SHA256SUMS`). The extracted binary on disk is hashed with SHA-256 and verified against the exact per-platform manifest entry before running even a basic version probe. Any digest mismatch immediately aborts with an `InstallationFailedError`, ensuring tampered or corrupted binaries are never executed.
+   - For downloaded fixture pack archives and pack trees, archive digests and canonical CF-02 directory trees are verified before extraction and execution; any divergence triggers a [`ChecksumMismatchError`](../src/errors.ts) and fails closed.
+3. **Strict-integrity policy and provenance.** Under the `strict-integrity` policy ([`src/canary.ts`](../src/canary.ts), issue #372):
+   - By default (`strict-integrity: false`), if a release lacks a published prebuilt asset or valid checksum manifest, the Action logs a warning and falls back to a source build via `cargo install` where integrity rests on the immutable commit/tag pin.
+   - When strict integrity is required (`strict-integrity: true`), the Action requires explicit cryptographic proof of provenance. If a published checksum manifest cannot be obtained or verified over HTTPS, or if a binary originates from a source build lacking release checksum manifests, the Action refuses unverified fallback and fails closed immediately with an `InstallationFailedError`.
+
 ## Known limits
 
 - Read-only tokens still allow **artifact and log reads** by anyone with repo

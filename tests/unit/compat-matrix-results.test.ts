@@ -4,6 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import { buildMatrix } from "../../scripts/compat-matrix-inputs.mjs";
 import {
+  formatResultsTable,
+  shouldFailJob,
+} from "../../scripts/classify-compat.mjs";
+import {
   collectResults,
   writeCellFacts,
   writeCollectionOutputs,
@@ -387,5 +391,47 @@ describe("compatibility matrix cell evidence", () => {
     expect(result.cells[0]!.classification).toBe("supported");
     expect(result.issues.some((issue) => issue.type === "matrix-job")).toBe(true);
     expect(result.hasFailures).toBe(true);
+  });
+
+  it("formats markdown table and evaluates job success when all matrix cells are skipped (#598)", () => {
+    const cells: Parameters<typeof formatResultsTable>[0] = [
+      {
+        engineRef: "v0.1.1",
+        packRef: "protocol-28",
+        actionCommit: ACTION_COMMIT,
+        runUrl: RUN_URL,
+        classification: "skipped",
+        reason: "Offline-xdr mode skipped live RPC fixtures | reason with <tags> & pipes",
+        evidence: RUN_URL,
+      },
+      {
+        engineRef: "v0.2.0",
+        packRef: "protocol-29",
+        actionCommit: ACTION_COMMIT,
+        runUrl: RUN_URL,
+        classification: "skipped",
+        reason: "Cell ran but executed zero checks (no compatible fixtures)",
+        evidence: RUN_URL,
+      },
+    ];
+
+    // 1. Table generation and header assertion
+    const table = formatResultsTable(cells);
+    expect(table).toContain("| Engine | Pack | Classification | Reason | Evidence |");
+    expect(table).toContain("|---|---|---|---|---|");
+
+    // 2. Assert skip icon (⏭️) and rows formatting
+    expect(table).toContain("| v0.1.1 | protocol-28 | ⏭️ skipped |");
+    expect(table).toContain("| v0.2.0 | protocol-29 | ⏭️ skipped |");
+
+    // 3. Verify pipe and special character escaping in reason
+    expect(table).toContain("Offline-xdr mode skipped live RPC fixtures \\| reason with &lt;tags&gt; &amp; pipes");
+    expect(table).not.toContain("<tags>");
+    expect(table).not.toContain(" | reason");
+
+    // 4. Assert shouldFailJob returns false for every cell in all-skipped set
+    for (const cell of cells) {
+      expect(shouldFailJob(cell.classification)).toBe(false);
+    }
   });
 });
